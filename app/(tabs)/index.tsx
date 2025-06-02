@@ -1,4 +1,3 @@
-import { useRouter } from "expo-router";
 import {
   ActivityIndicator,
   FlatList,
@@ -9,21 +8,56 @@ import {
 } from "react-native";
 
 import { fetchMovies } from "@/services/api";
-import useFetch from "@/services/useFetch";
+import { getTrendingMovies } from "@/services/appwrite";
+import { useCallback, useState } from "react";
 
 import { icons } from "@/constants/icons";
 import { images } from "@/constants/images";
 
 import MovieCard from "@/components/movieCard";
+import TrendingCard from "@/components/trendingCard";
+import { useFocusEffect } from "expo-router";
 
 const Index = () => {
-  const router = useRouter();
 
-  const {
-    data: movies,
-    loading: moviesLoading,
-    error: moviesError,
-  } = useFetch(() => fetchMovies({ query: "" }));
+  const [trendingMovies, setTrendingMovies] = useState<TrendingMovie[]>([]);
+  const [trendingLoading, setTrendingLoading] = useState(true);
+  const [trendingError, setTrendingError] = useState<Error | null>(null);
+
+  const [movies, setMovies] = useState<Movie[]>([]);
+  const [moviesLoading, setMoviesLoading] = useState(true);
+  const [moviesError, setMoviesError] = useState<Error | null>(null);
+
+  const fetchAll = useCallback(async () => {
+    setTrendingLoading(true);
+    setMoviesLoading(true);
+    setTrendingError(null);
+    setMoviesError(null);
+
+    try {
+      const trending = await getTrendingMovies();
+      setTrendingMovies(trending || []);
+    } catch (err) {
+      setTrendingError(err instanceof Error ? err : new Error(String(err)));
+    } finally {
+      setTrendingLoading(false);
+    }
+
+    try {
+      const latest = await fetchMovies({ query: "" });
+      setMovies(latest || []);
+    } catch (err) {
+      setMoviesError(err instanceof Error ? err : new Error(String(err)));
+    } finally {
+      setMoviesLoading(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchAll();
+    }, [fetchAll])
+  );
 
   return (
     <View className="flex-1 bg-primary">
@@ -40,19 +74,46 @@ const Index = () => {
       >
         <Image source={icons.logo} className="w-12 h-10 mt-20 mb-5 mx-auto" />
 
-        {moviesLoading ? (
+        {moviesLoading || trendingLoading ? (
           <ActivityIndicator
             size="large"
             color="#0000ff"
             className="mt-10 self-center"
           />
-        ) : moviesError ? (
-          <Text>Error: {moviesError?.message}</Text>
+        ) : moviesError || trendingError ? (
+          <Text>Error: {moviesError?.message || trendingError?.message}</Text>
         ) : (
-          <View className="flex-1 mt-2">
+          <View className="flex-1 mt-0">
+
+            {trendingMovies && (
+              <View className="mt-10">
+                <Text className="text-lg text-white font-bold mb-3">
+                  Trending Movies
+                </Text>
+                <FlatList
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  className="mb-4 mt-3"
+                  data={
+                    trendingMovies.filter(
+                      (movie, index, self) =>
+                        self.findIndex((m) => m.movie_id === movie.movie_id) === index
+                    )
+                  }
+                  contentContainerStyle={{
+                    gap: 26,
+                  }}
+                  renderItem={({ item, index }) => (
+                    <TrendingCard movie={item} index={index} />
+                  )}
+                  keyExtractor={(item) => item.movie_id.toString()}
+                  ItemSeparatorComponent={() => <View className="w-4" />}
+                />
+              </View>
+            )}
 
             <>
-              <Text className="text-lg text-white font-bold mt-2 mb-3">
+              <Text className="text-lg text-white font-bold mt-5 mb-3">
                 Latest Movies
               </Text>
 
